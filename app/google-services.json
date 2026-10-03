@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961868678663",
+    "project_id": "helpdesk-41f10",
+    "storage_bucket": "helpdesk-41f10.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961868678663:android:19e0d5d79b1863a50a4ca2",
+        "android_client_info": {
+          "package_name": "com.example.helpdesk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8c4wyVw5c7uXQsNpJvNn8UIpj5giEU-U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
