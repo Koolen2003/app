@@ -64,35 +64,3 @@ fun NotificationsScreen(notifRepo: NotificationRepository, userId: String) {
     }
 }
 
-@Composable
-fun NotificationPermissionPrompt() {
-    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
-
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val show = remember {
-        androidx.compose.runtime.mutableStateOf(
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.POST_NOTIFICATIONS
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { show.value = false }
-
-    if (show.value) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { show.value = false },
-            title = { Text("Notifications") },
-            text = { Text("Allow HelpDesk to notify you when a ticket is submitted, claimed or updated.") },
-            confirmButton = {
-                androidx.compose.material3.Button(onClick = {
-                    launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                }) { Text("Allow") }
-            },
-            dismissButton = {
-                androidx.compose.material3.Button(onClick = { show.value = false }) { Text("Not Now") }
-            }
-        )
-    }
-}

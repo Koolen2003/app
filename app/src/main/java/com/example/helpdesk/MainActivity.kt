@@ -228,43 +228,28 @@ fun NewTicketTab(
     var isSubmitting by remember { mutableStateOf(false) }
     var showCameraRationale by remember { mutableStateOf(false) }
     var showPermanentlyDeniedDialog by remember { mutableStateOf(false) }
+    var showGalleryRationale by remember { mutableStateOf(false) }
+    var showGalleryPermanentlyDenied by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
 
     var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
 
+    fun storagePermissionName(): String {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            android.Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            android.Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+
+    // 1) launchers that don't depend on anything else
     val cameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && cameraUri != null) {
             photoBase64 = uriToCompressedBase64(context, cameraUri!!)
-        }
-    }
-
-    fun launchCamera() {
-        val file = java.io.File.createTempFile("ticket_photo_", ".jpg", context.cacheDir)
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            context, "${context.packageName}.fileprovider", file
-        )
-        cameraUri = uri
-        cameraLauncher.launch(uri)
-    }
-
-    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            launchCamera()
-        } else {
-            val canAskAgain = activity?.let {
-                androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
-                    it, android.Manifest.permission.CAMERA
-                )
-            } ?: true
-            if (!canAskAgain) {
-                showPermanentlyDeniedDialog = true
-            }
         }
     }
 
@@ -276,18 +261,73 @@ fun NewTicketTab(
         }
     }
 
+    // 2) helper that uses cameraLauncher
+    fun launchCamera() {
+        val file = java.io.File.createTempFile("ticket_photo_", ".jpg", context.cacheDir)
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, "${context.packageName}.fileprovider", file
+        )
+        cameraUri = uri
+        cameraLauncher.launch(uri)
+    }
+
+    // 3) permission launchers that use the two above
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            launchCamera()
+        } else {
+            val canAskAgain = activity?.let {
+                androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                    it, android.Manifest.permission.CAMERA
+                )
+            } ?: true
+            if (!canAskAgain) showPermanentlyDeniedDialog = true
+        }
+    }
+
+    val storagePermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            galleryLauncher.launch("image/*")
+        } else {
+            val canAskAgain = activity?.let {
+                androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                    it, storagePermissionName()
+                )
+            } ?: true
+            if (!canAskAgain) showGalleryPermanentlyDenied = true
+        }
+    }
+
+    // 4) button click handlers
     fun onCameraButtonClick() {
         val alreadyGranted = androidx.core.content.ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.CAMERA
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-        if (alreadyGranted) {
-            launchCamera()
-        } else {
-            showCameraRationale = true
-        }
+        if (alreadyGranted) launchCamera() else showCameraRationale = true
     }
 
+    fun onGalleryButtonClick() {
+        val alreadyGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, storagePermissionName()
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (alreadyGranted) galleryLauncher.launch("image/*") else showGalleryRationale = true
+    }
+
+    fun openAppSettings() {
+        val intent = android.content.Intent(
+            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            android.net.Uri.fromParts("package", context.packageName, null)
+        )
+        context.startActivity(intent)
+    }
+
+    // ---- dialogs ----
     if (showCameraRationale) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showCameraRationale = false },
@@ -313,11 +353,7 @@ fun NewTicketTab(
             confirmButton = {
                 Button(onClick = {
                     showPermanentlyDeniedDialog = false
-                    val intent = android.content.Intent(
-                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        android.net.Uri.fromParts("package", context.packageName, null)
-                    )
-                    context.startActivity(intent)
+                    openAppSettings()
                 }) { Text("Open Settings") }
             },
             dismissButton = {
@@ -326,6 +362,41 @@ fun NewTicketTab(
         )
     }
 
+    if (showGalleryRationale) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showGalleryRationale = false },
+            title = { Text("Storage Permission") },
+            text = { Text("HelpDesk needs access to your photos so you can attach an existing picture to your ticket.") },
+            confirmButton = {
+                Button(onClick = {
+                    showGalleryRationale = false
+                    storagePermissionLauncher.launch(storagePermissionName())
+                }) { Text("Allow") }
+            },
+            dismissButton = {
+                Button(onClick = { showGalleryRationale = false }) { Text("Not Now") }
+            }
+        )
+    }
+
+    if (showGalleryPermanentlyDenied) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showGalleryPermanentlyDenied = false },
+            title = { Text("Storage Blocked") },
+            text = { Text("Photo access was denied. Please enable it manually in Settings > Apps > HelpDesk > Permissions.") },
+            confirmButton = {
+                Button(onClick = {
+                    showGalleryPermanentlyDenied = false
+                    openAppSettings()
+                }) { Text("Open Settings") }
+            },
+            dismissButton = {
+                Button(onClick = { showGalleryPermanentlyDenied = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // ---- screen ----
     Column(modifier = Modifier.fillMaxSize()) {
         AppHeader(title = "New Ticket", subtitle = "Report an issue")
 
@@ -393,7 +464,7 @@ fun NewTicketTab(
                     Text("📷 Camera")
                 }
                 Button(
-                    onClick = { galleryLauncher.launch("image/*") },
+                    onClick = { onGalleryButtonClick() },
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 ) {
                     Text("🖼 Gallery")

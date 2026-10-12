@@ -29,7 +29,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.height
-
+import androidx.compose.material3.Button
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 // Brand colors matching the CampusFix design
 val IndigoPrimary: Color get() = ThemeManager.primary
 val VioletAccent: Color get() = ThemeManager.accent
@@ -417,6 +420,72 @@ fun StudentTabBar(selectedTab: StudentTab, onTabSelected: (StudentTab) -> Unit) 
     }
 }
 
+@Composable
+fun NotificationPermissionPrompt() {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+    var showRationale by remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var showPermanentlyDenied by remember { mutableStateOf(false) }
+
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            val canAskAgain = activity?.let {
+                androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                    it, android.Manifest.permission.POST_NOTIFICATIONS
+                )
+            } ?: true
+            if (!canAskAgain) showPermanentlyDenied = true
+        }
+    }
+
+    if (showRationale) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRationale = false },
+            title = { Text("Notifications") },
+            text = { Text("Allow HelpDesk to notify you when a ticket is submitted, claimed or updated.") },
+            confirmButton = {
+                Button(onClick = {
+                    showRationale = false
+                    launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }) { Text("Allow") }
+            },
+            dismissButton = {
+                Button(onClick = { showRationale = false }) { Text("Not Now") }
+            }
+        )
+    }
+
+    if (showPermanentlyDenied) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPermanentlyDenied = false },
+            title = { Text("Notifications Blocked") },
+            text = { Text("Notifications were denied. Please enable them manually in Settings > Apps > HelpDesk > Permissions.") },
+            confirmButton = {
+                Button(onClick = {
+                    showPermanentlyDenied = false
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.fromParts("package", context.packageName, null)
+                    )
+                    context.startActivity(intent)
+                }) { Text("Open Settings") }
+            },
+            dismissButton = {
+                Button(onClick = { showPermanentlyDenied = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
 @Composable
 fun NotificationBell(unreadCount: Int, onClick: () -> Unit) {
     Box(modifier = Modifier.clickable { onClick() }) {
